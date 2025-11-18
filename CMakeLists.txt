@@ -3,12 +3,30 @@ project(phantomjs)
 
 set (CMAKE_CXX_STANDARD 11)
 
+if(APPLE)
+  # Help Homebrew users by hinting the common keg paths when no prefix was provided.
+  foreach(_qt_hint IN ITEMS "/opt/homebrew/opt/qt@5" "/usr/local/opt/qt@5")
+    if(EXISTS "${_qt_hint}" AND NOT _qt_hint STREQUAL "")
+      list(APPEND CMAKE_PREFIX_PATH "${_qt_hint}")
+    endif()
+  endforeach()
+  foreach(_qtwebkit_hint IN ITEMS "/opt/homebrew/opt/qtwebkit" "/usr/local/opt/qtwebkit")
+    if(EXISTS "${_qtwebkit_hint}" AND NOT _qtwebkit_hint STREQUAL "")
+      list(APPEND CMAKE_PREFIX_PATH "${_qtwebkit_hint}")
+    endif()
+  endforeach()
+endif()
+
 find_package(Qt5 COMPONENTS Core Network WebKitWidgets REQUIRED)
 find_package(Threads REQUIRED)
+find_package(PythonInterp 2.7 EXACT)
 
 message("Using Qt version ${Qt5Core_VERSION}")
-if (Qt5Core_VERSION VERSION_LESS 5.5.0)
-  message(FATAL_ERROR "This version of Qt is not supported. Please use Qt 5.5 or later")
+if (Qt5Core_VERSION VERSION_LESS 5.12.0)
+  message(FATAL_ERROR "This version of Qt is not supported. Please use Qt 5.12 or later")
+endif()
+if(NOT PYTHONINTERP_FOUND)
+  message(FATAL_ERROR "Python 2.7 is required to run 'make check'. Install python@2.7 and rerun CMake.")
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -36,4 +54,4 @@ add_executable(${PROJECT_NAME} src/phantomjs.qrc ${PHANTOMJS_SOURCES} ${THIRDPAR
 target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS} Qt5::Core Qt5::Network Qt5::WebKitWidgets Threads::Threads)
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
-add_custom_target(check COMMAND python test/run-tests.py -v)
+add_custom_target(check COMMAND "${PYTHON_EXECUTABLE}" test/run-tests.py -v)

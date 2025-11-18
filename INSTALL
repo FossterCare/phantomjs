@@ -73,7 +73,44 @@ Do a quick sanity check:
 
 
 Installation on macOS
----------------------
+----------------------
 
-To be written.
+The macOS build relies on Qt 5.12+ together with the Community QtWebKit
+5.212 formula.  The easiest way to obtain those bits on Apple Silicon or
+Intel Macs is via Homebrew:
+
+  brew update
+  brew install cmake ninja pkg-config qt@5 qtwebkit openssl@3
+  brew install --ignore-dependencies [email protected] || true   # test runner only
+  pyenv install 2.7.18 --skip-existing
+  pyenv virtualenv 2.7.18 phantomjs-py2
+
+Export the toolchain locations so that CMake can discover QtWebKit:
+
+  export PATH="$(brew --prefix qt@5)/bin:$(brew --prefix ninja)/bin:$PATH"
+  export CMAKE_PREFIX_PATH="$(brew --prefix qt@5);$(brew --prefix qtwebkit);$(brew --prefix openssl@3)"
+  export Qt5_DIR="$(brew --prefix qt@5)/lib/cmake/Qt5"
+  export PKG_CONFIG_PATH="$(brew --prefix qtwebkit)/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig"
+
+Then configure and build from a clean checkout:
+
+  cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+  cmake --build build --parallel
+
+Verify the binary:
+
+  ./build/bin/phantomjs --version
+
+Testing still depends on Python 2.7 because `test/run-tests.py` imports the
+legacy stdlib modules `SimpleHTTPServer`, `SocketServer`, and `cStringIO`.  The
+CMake `check` target now wires itself to the detected Python 2.7 interpreter, so
+ensure the `pyenv` virtualenv above is activated before running `cmake`:
+
+  ( pyenv activate phantomjs-py2 && cmake --build build --target check )
+
+If CMake cannot find QtWebKit, point it explicitly at the keg, for example by
+adding `-DQt5WebKit_DIR=$(brew --prefix qtwebkit)/lib/cmake/Qt5WebKit`.
 

@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 
+import sys
+
+if sys.version_info[:2] != (2, 7):
+    sys.stderr.write(
+        "PhantomJS test runner requires Python 2.7, but detected {}.{}\n".format(
+            sys.version_info[0], sys.version_info[1]
+        )
+    )
+    sys.stderr.write("Install Python 2.7 (e.g. via pyenv) and re-run make check.\n")
+    sys.exit(1)
+
 import argparse
 import collections
 import errno
@@ -17,7 +28,6 @@ import ssl
 import string
 import cStringIO as StringIO
 import subprocess
-import sys
 import threading
 import time
 import traceback
