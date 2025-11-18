@@ -19,14 +19,14 @@ endif()
 
 find_package(Qt5 COMPONENTS Core Network WebKitWidgets REQUIRED)
 find_package(Threads REQUIRED)
-find_package(PythonInterp 2.7 EXACT)
+find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 
 message("Using Qt version ${Qt5Core_VERSION}")
 if (Qt5Core_VERSION VERSION_LESS 5.12.0)
   message(FATAL_ERROR "This version of Qt is not supported. Please use Qt 5.12 or later")
 endif()
-if(NOT PYTHONINTERP_FOUND)
-  message(FATAL_ERROR "Python 2.7 is required to run 'make check'. Install python@2.7 and rerun CMake.")
+if(NOT Python3_FOUND)
+  message(FATAL_ERROR "Python 3.10+ is required to run 'make check'. Install python@3.14 and rerun CMake.")
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -54,4 +54,4 @@ add_executable(${PROJECT_NAME} src/phantomjs.qrc ${PHANTOMJS_SOURCES} ${THIRDPAR
 target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS} Qt5::Core Qt5::Network Qt5::WebKitWidgets Threads::Threads)
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
-add_custom_target(check COMMAND "${PYTHON_EXECUTABLE}" test/run-tests.py -v)
+add_custom_target(check COMMAND "${Python3_EXECUTABLE}" test/run-tests.py -v)

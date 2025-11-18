@@ -1,37 +1,33 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 
-if sys.version_info[:2] != (2, 7):
+if sys.version_info < (3, 10):
     sys.stderr.write(
-        "PhantomJS test runner requires Python 2.7, but detected {}.{}\n".format(
-            sys.version_info[0], sys.version_info[1]
-        )
+        "PhantomJS test runner requires Python 3.10 or newer (validated on 3.14), "
+        "but detected {}.{}\n".format(sys.version_info[0], sys.version_info[1])
     )
-    sys.stderr.write("Install Python 2.7 (e.g. via pyenv) and re-run make check.\n")
+    sys.stderr.write("Install Python 3.14 via Homebrew/pyenv and re-run make check.\n")
     sys.exit(1)
 
 import argparse
 import collections
 import errno
 import glob
-import imp
+import importlib.util
 import os
 import platform
 import posixpath
 import re
 import shlex
-import SimpleHTTPServer
-import socket
-import SocketServer
+import socketserver
 import ssl
-import string
-import cStringIO as StringIO
 import subprocess
 import threading
 import time
 import traceback
-import urllib
+from http.server import SimpleHTTPRequestHandler
+from urllib.parse import quote, unquote
 
 # All files matching one of these glob patterns will be run as tests.
 TESTS = [
@@ -92,7 +88,7 @@ def activate_colorization(options):
     else:
         if sys.stdout.isatty() and platform.system() != "Windows":
             try:
-                n = int(subprocess.check_output(["tput", "colors"]))
+                n = int(subprocess.check_output(["tput", "colors"]).decode().strip() or 0)
                 if n >= 8:
                     _COLORS = _COLOR_ON
                 else:
@@ -105,14 +101,9 @@ def activate_colorization(options):
 def colorize(color, message):
     return _COLORS[color] + message + _COLORS["_"]
 
-# create_default_context and SSLContext were only added in 2.7.9,
-# which is newer than the python2 that ships with OSX :-(
-# The fallback tries to mimic what create_default_context(CLIENT_AUTH)
-# does.  Security obviously isn't important in itself for a test
-# server, but making sure the PJS client can talk to a server
-# configured according to modern TLS best practices _is_ important.
-# Unfortunately, there is no way to set things like OP_NO_SSL2 or
-# OP_CIPHER_SERVER_PREFERENCE prior to 2.7.9.
+# create_default_context used to be missing from older interpreters;
+# the fallback mimics create_default_context(CLIENT_AUTH) so the
+# harness can still run if a future user forces an ancient Python.
 CIPHERLIST_2_7_9 = (
     'ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:'
     'DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:!aNULL:'
@@ -138,19 +129,26 @@ def wrap_socket_ssl(sock, base_path):
 # can tell, it isn't.
 class ResponseHookImporter(object):
     def __init__(self, www_path):
+        self.www_path = www_path
         # All Python response hooks, no matter how deep below www_path,
         # are treated as direct children of the fake "test_www" package.
         if 'test_www' not in sys.modules:
-            imp.load_source('test_www', www_path + '/__init__.py')
+            self._load_module('test_www', os.path.join(www_path, '__init__.py'))
 
-        self.tr = string.maketrans('-./%', '____')
+        self.tr = str.maketrans('-./%', '____')
+
+    def _load_module(self, name, path):
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules[name] = module
+        return module
 
     def __call__(self, path):
         modname = 'test_www.' + path.translate(self.tr)
-        try:
+        if modname in sys.modules:
             return sys.modules[modname]
-        except KeyError:
-            return imp.load_source(modname, path)
+        return self._load_module(modname, path)
 
 # This should also be in the standard library somewhere, and
 # definitely isn't.
@@ -198,7 +196,10 @@ def do_call_subprocess(command, verbose, stdin_data, timeout):
     proc = subprocess.Popen(command,
                             stdin=stdin,
                             stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            encoding='utf-8',
+                            errors='replace')
 
     if stdin_data:
         sithrd = threading.Thread(target=write_thread,
@@ -244,13 +245,14 @@ def do_call_subprocess(command, verbose, stdin_data, timeout):
 # HTTP/HTTPS server, presented on localhost to the tests
 #
 
-class FileHandler(SimpleHTTPServer.SimpleHTTPRequestHandler, object):
+class FileHandler(SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         self._cached_untranslated_path = None
         self._cached_translated_path = None
         self.postdata = None
-        super(FileHandler, self).__init__(*args, **kwargs)
+        self.postdata_raw = None
+        super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args):
         if self.verbose >= 3:
@@ -266,15 +268,19 @@ class FileHandler(SimpleHTTPServer.SimpleHTTPRequestHandler, object):
     def do_POST(self):
         try:
             ln = int(self.headers.get('content-length'))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             self.send_response(400, 'Bad Request')
-            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            message = "No or invalid Content-Length in POST ({!r})".format(
+                self.headers.get('content-length'))
+            self.send_header('Content-Length', str(len(message)))
             self.end_headers()
-            self.wfile.write("No or invalid Content-Length in POST (%r)"
-                             % self.headers.get('content-length'))
+            self.wfile.write(message.encode('utf-8'))
             return
 
-        self.postdata = self.rfile.read(ln)
+        raw = self.rfile.read(ln)
+        self.postdata_raw = raw
+        self.postdata = raw.decode('utf-8', errors='surrogateescape')
         self.do_GET()
 
     # allow provision of a .py file that will be interpreted to
@@ -298,7 +304,7 @@ class FileHandler(SimpleHTTPServer.SimpleHTTPRequestHandler, object):
             return None
 
         if os.path.exists(path):
-            return super(FileHandler, self).send_head()
+            return super().send_head()
 
         py = path + '.py'
         if os.path.exists(py):
@@ -335,7 +341,8 @@ class FileHandler(SimpleHTTPServer.SimpleHTTPRequestHandler, object):
         # Ensure consistent encoding of special characters, then
         # lowercase everything so that the tests behave consistently
         # whether or not the local filesystem is case-sensitive.
-        path = urllib.quote(urllib.unquote(path)).lower()
+        decoded = unquote(path)
+        path = quote(decoded, safe="/").lower()
 
         # Prevent access to files outside www/.
         # At this point we want specifically POSIX-like treatment of 'path'
@@ -361,13 +368,13 @@ class FileHandler(SimpleHTTPServer.SimpleHTTPRequestHandler, object):
         self._cached_translated_path = path
         return path
 
-class TCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+class TCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     # This is how you are officially supposed to set SO_REUSEADDR per
-    # https://docs.python.org/2/library/socketserver.html#SocketServer.BaseServer.allow_reuse_address
+    # https://docs.python.org/3/library/socketserver.html#socketserver.BaseServer.allow_reuse_address
     allow_reuse_address = True
 
     def __init__(self, use_ssl, handler, base_path, signal_error):
-        SocketServer.TCPServer.__init__(self, ('localhost', 0), handler)
+        socketserver.TCPServer.__init__(self, ('localhost', 0), handler)
         if use_ssl:
             self.socket = wrap_socket_ssl(self.socket, base_path)
         self._signal_error = signal_error
@@ -878,7 +885,7 @@ class TestRunner(object):
             sys.stdout.write(colorize("^", name) + ":\n")
         # Parse any directives at the top of the script.
         try:
-            with open(script, "rt") as s:
+            with open(script, "rt", encoding="utf-8") as s:
                 for line in s:
                     if not line.startswith("//!"):
                         break

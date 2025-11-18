@@ -1,5 +1,5 @@
-import cStringIO as StringIO
-import urlparse
+import io
+from urllib import parse as urlparse
 
 def html_esc(s):
     return s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
@@ -43,8 +43,9 @@ def handle_request(req):
 
     req.send_response(status)
     req.send_header('Content-Type', 'text/html')
-    req.send_header('Content-Length', str(len(body)))
+    body_bytes = body.encode('utf-8')
+    req.send_header('Content-Length', str(len(body_bytes)))
     for key, value in headers:
         req.send_header(key, value)
     req.end_headers()
-    return StringIO.StringIO(body)
+    return io.BytesIO(body_bytes)

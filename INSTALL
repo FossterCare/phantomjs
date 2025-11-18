@@ -7,7 +7,7 @@ System requirements:
   * CMake version 3.5 or later
   * Qt 5 toolkit
   * Community QtWebKit version 5.212 or later
-  * Python 2.7 (to run the tests)
+  * Python 3.10 or later (3.14 recommended) to run the tests
 
 
 Installation on Linux
@@ -22,7 +22,7 @@ be supported:
 
 On Debian/Ubuntu, the requirements can be fulfilled by installing these packages:
 
-  sudo apt install g++ cmake qt5-default libqt5webkit5-dev python
+  sudo apt install g++ cmake qt5-default libqt5webkit5-dev python3
 
 After unpacking the source tarball or cloning the repository:
 
@@ -54,7 +54,7 @@ Then, from "MYS2 MinGW64 32-bit" shell, install the required packages:
   pacman -S mingw32/mingw-w64-i686-toolchain
   pacman -S mingw32/mingw-w64-i686-cmake
   pacman -S mingw32/mingw-w64-i686-qtwebkit
-  pacman -S mingw32/mingw-w64-i686-python2
+  pacman -S mingw32/mingw-w64-i686-python3
 
 Note: add --disable-download-timeout as an additional argument, if the
 installation failed due to the slow server responses.
@@ -80,10 +80,9 @@ The macOS build relies on Qt 5.12+ together with the Community QtWebKit
 Intel Macs is via Homebrew:
 
   brew update
-  brew install cmake ninja pkg-config qt@5 qtwebkit openssl@3
-  brew install --ignore-dependencies [email protected] || true   # test runner only
-  pyenv install 2.7.18 --skip-existing
-  pyenv virtualenv 2.7.18 phantomjs-py2
+  brew install cmake ninja pkg-config qt@5 qtwebkit openssl@3 python@3.12
+  pyenv install 3.14.0 --skip-existing
+  pyenv virtualenv 3.14.0 phantomjs-py3
 
 Export the toolchain locations so that CMake can discover QtWebKit:
 
@@ -104,12 +103,10 @@ Verify the binary:
 
   ./build/bin/phantomjs --version
 
-Testing still depends on Python 2.7 because `test/run-tests.py` imports the
-legacy stdlib modules `SimpleHTTPServer`, `SocketServer`, and `cStringIO`.  The
-CMake `check` target now wires itself to the detected Python 2.7 interpreter, so
-ensure the `pyenv` virtualenv above is activated before running `cmake`:
+Testing now targets Python 3.14+.  Activate the `pyenv` virtualenv above before
+running `cmake` so the interpreter is recorded in the build tree:
 
-  ( pyenv activate phantomjs-py2 && cmake --build build --target check )
+  ( pyenv activate phantomjs-py3 && cmake --build build --target check )
 
 If CMake cannot find QtWebKit, point it explicitly at the keg, for example by
 adding `-DQt5WebKit_DIR=$(brew --prefix qtwebkit)/lib/cmake/Qt5WebKit`.

@@ -1,6 +1,6 @@
+import io
 import json
-import urlparse
-import cStringIO as StringIO
+from urllib import parse as urlparse
 
 def handle_request(req):
     url = urlparse.urlparse(req.path)
@@ -21,9 +21,10 @@ def handle_request(req):
         postdata = req.postdata
     )
     body = json.dumps(d, indent=2) + '\n'
+    body_bytes = body.encode('utf-8')
 
     req.send_response(200)
     req.send_header('Content-Type', 'application/json')
-    req.send_header('Content-Length', str(len(body)))
+    req.send_header('Content-Length', str(len(body_bytes)))
     req.end_headers()
-    return StringIO.StringIO(body)
+    return io.BytesIO(body_bytes)

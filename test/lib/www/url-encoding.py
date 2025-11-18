@@ -1,21 +1,24 @@
 # -*- encoding: utf-8 -*-
-import urlparse
-from cStringIO import StringIO
+import io
 import time
+from urllib import parse as urlparse
 
 def html_esc(s):
     return s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
 
-def do_response(req, body, code=200, headers={}):
+def do_response(req, body, code=200, headers=None):
+    if headers is None:
+        headers = {}
+    body_bytes = body.encode('utf-8')
     req.send_response(code)
-    req.send_header('Content-Length', str(len(body)))
+    req.send_header('Content-Length', str(len(body_bytes)))
     if 'Content-Type' not in headers:
         req.send_header('Content-Type', 'text/html')
     for k, v in headers.items():
         if k != 'Content-Length':
             req.send_header(k, v)
     req.end_headers()
-    return StringIO(body)
+    return io.BytesIO(body_bytes)
 
 def do_redirect(req, target):
     return do_response(req,

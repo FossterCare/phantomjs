@@ -16,7 +16,7 @@ Purpose: coordinate local or automated agents so PhantomJS builds successfully o
 
 3. **Test Agent**
    - Runs the JavaScript suite via `make check` (which invokes `python test/run-tests.py`).
-   - Uses Python 2.7 specifically; fails fast if only Python 3 is available.
+   - Uses Python 3.14 (3.10+ minimum); fails fast if an older interpreter is on PATH.
    - Archives `test/output` (created by the harness) for later inspection.
 
 4. **Review Agent**
@@ -35,12 +35,12 @@ Each agent should leave artifacts (`logs/deps.txt`, `logs/build.txt`, `logs/test
 brew update
 brew install cmake ninja pkg-config qt@5 qtwebkit openssl@3 python@3.12
 brew install --ignore-dependencies [email protected] || true   # needed only for the legacy test runner
-pyenv install 2.7.18 --skip-existing
-pyenv virtualenv 2.7.18 phantomjs-py2
+pyenv install 3.14.0 --skip-existing
+pyenv virtualenv 3.14.0 phantomjs-py3
 ```
 
 - `qtwebkit` is the Community QtWebKit 5.212 build. Homebrew may mark it as deprecated; force-install if necessary.
-- Python 2 is required only for `test/run-tests.py` (imports `SimpleHTTPServer`, `SocketServer`, etc.). Keep it isolated via `pyenv` to avoid polluting the system interpreter.
+- Python 3.14 is required for `test/run-tests.py`; use `pyenv` to avoid interfering with the system interpreter.
 
 ### 2. Export environment for this shell
 
@@ -78,13 +78,13 @@ Expect the binary under `build/bin/phantomjs`. The version string should match `
 ### 5. Test (optional but recommended)
 
 ```bash
-( pyenv activate phantomjs-py2 && cmake --build build --target check )
+( pyenv activate phantomjs-py3 && cmake --build build --target check )
 ```
 
 The `check` target simply runs `python test/run-tests.py -v`. If you prefer manual control, run
 
 ```bash
-( pyenv activate phantomjs-py2 && python test/run-tests.py -v basics/*.js )
+( pyenv activate phantomjs-py3 && python test/run-tests.py -v basics/*.js )
 ```
 
 to narrow down failures.
@@ -93,13 +93,13 @@ to narrow down failures.
 
 - **QtWebKit not found**: Ensure `qtwebkit` keg is linked (`brew link --overwrite qtwebkit`). If CMake still fails, set `-DQt5WebKit_DIR=$(brew --prefix qtwebkit)/lib/cmake/Qt5WebKit`.
 - **Linker errors around SSL**: Add `-DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)` (Qt WebKit on macOS still expects OpenSSL 1.1 style includes).
-- **Python errors (`ModuleNotFoundError: SimpleHTTPServer`)**: You are accidentally using Python 3. Switch to the `pyenv` 2.7 shim or edit `test/run-tests.py` to be Python 3 compatible before re-running `make check`.
+- **Python errors (wrong interpreter recorded)**: Re-run `cmake` after activating the `pyenv` Python 3.14 virtualenv so the `check` target uses the right interpreter.
 - **`QWebSettings` symbol missing**: Verify you are not picking up a Qt 6 installation; only Qt 5.15.x with Community QtWebKit 5.212 is supported.
 
 ## Review Observations Feeding This Plan
 
 - `INSTALL` intentionally leaves macOS instructions blank, so this document fills that gap while referencing the existing Linux/Windows guidance (`INSTALL`).
 - `CMakeLists.txt` hard-requires `Qt5::WebKitWidgets` but only checks that `Qt5Core_VERSION >= 5.5`. Community QtWebKit currently needs Qt >= 5.12, so agents should enforce that higher floor during dependency validation (`CMakeLists.txt`).
-- `test/run-tests.py` imports Python 2–only modules (`SimpleHTTPServer`, `SocketServer`, `cStringIO`), therefore `make check` breaks unless a Python 2.7 interpreter is made available.
+- `test/run-tests.py` now targets Python 3.14+, so agents should ensure `pyenv` (or system Python) provides that version before running `cmake`.
 
 Keep this playbook under version control. Update it whenever the build moves to a different Qt or Python stack so agents do not have to rediscover the process.

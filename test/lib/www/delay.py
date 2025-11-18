@@ -1,5 +1,5 @@
-import cStringIO as StringIO
-import urlparse
+import io
+from urllib import parse as urlparse
 import time
 
 def handle_request(req):
@@ -10,6 +10,7 @@ def handle_request(req):
     body = "OK ({}ms delayed)\n".format(delay)
     req.send_response(200)
     req.send_header('Content-Type', 'text/plain')
-    req.send_header('Content-Length', str(len(body)))
+    body_bytes = body.encode('utf-8')
+    req.send_header('Content-Length', str(len(body_bytes)))
     req.end_headers()
-    return StringIO.StringIO(body)
+    return io.BytesIO(body_bytes)
