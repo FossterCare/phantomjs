@@ -1029,14 +1029,6 @@ class TestRunner(object):
 def init():
     base_path = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
 
-    phantomjs_exe = os.path.normpath(base_path + '/../bin/phantomjs')
-    if sys.platform in ('win32', 'cygwin'):
-        phantomjs_exe += '.exe'
-    if not os.path.isfile(phantomjs_exe):
-        sys.stdout.write("{} is unavailable, cannot run tests.\n"
-                         .format(phantomjs_exe))
-        sys.exit(1)
-
     parser = argparse.ArgumentParser(description='Run PhantomJS tests.')
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help='Increase verbosity of logs (repeat for more)')
@@ -1048,9 +1040,20 @@ def init():
                         choices=['always', 'never', 'auto'],
                         help="colorize the output; can be 'always',"
                         " 'never', or 'auto' (the default)")
+    parser.add_argument('--phantomjs', metavar='PATH', default=None,
+                        help='Override the path to the PhantomJS binary')
 
     options = parser.parse_args()
     activate_colorization(options)
+    phantomjs_exe = options.phantomjs or os.path.normpath(base_path + '/../bin/phantomjs')
+    phantomjs_exe = os.path.abspath(os.path.expanduser(phantomjs_exe))
+    if sys.platform in ('win32', 'cygwin') and not phantomjs_exe.lower().endswith('.exe'):
+        phantomjs_exe += '.exe'
+    if not os.path.isfile(phantomjs_exe):
+        sys.stdout.write("{} is unavailable, cannot run tests.\n"
+                         .format(phantomjs_exe))
+        sys.exit(1)
+
     runner = TestRunner(base_path, phantomjs_exe, options)
     if options.verbose:
         rc, ver, err = runner.run_phantomjs('--version', silent=True)

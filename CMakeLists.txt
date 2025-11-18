@@ -54,4 +54,9 @@ add_executable(${PROJECT_NAME} src/phantomjs.qrc ${PHANTOMJS_SOURCES} ${THIRDPAR
 target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS} Qt5::Core Qt5::Network Qt5::WebKitWidgets Threads::Threads)
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
-add_custom_target(check COMMAND "${Python3_EXECUTABLE}" test/run-tests.py -v)
+add_custom_target(
+  check
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/run-tests.py" -v --phantomjs "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/phantomjs"
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  DEPENDS ${PROJECT_NAME}
+)
